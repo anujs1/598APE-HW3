@@ -4,20 +4,23 @@
 #include <string.h>
 #include <sys/time.h>
 
-float tdiff(struct timeval *start, struct timeval *end) {
+float tdiff(struct timeval *start, struct timeval *end)
+{
   return (end->tv_sec - start->tv_sec) + 1e-6 * (end->tv_usec - start->tv_usec);
 }
 
 unsigned long long seed = 100;
 
-unsigned long long randomU64() {
+unsigned long long randomU64()
+{
   seed ^= (seed << 21);
   seed ^= (seed >> 35);
   seed ^= (seed << 4);
   return seed;
 }
 
-double randomDouble() {
+double randomDouble()
+{
   unsigned long long next = randomU64();
   next >>= (64 - 26);
   unsigned long long next2 = randomU64();
@@ -29,22 +32,29 @@ int L;          // Lattice size (L x L)
 double T;       // Temperature
 double J = 1.0; // Coupling constant
 int **lattice;
+double total_energy = 0.0;
 
-void initializeLattice() {
+void initializeLattice()
+{
   lattice = (int **)malloc(sizeof(int *) * L);
-  for (int i = 0; i < L; i++) {
+  for (int i = 0; i < L; i++)
+  {
     lattice[i] = (int *)malloc(sizeof(int) * L);
-    for (int j = 0; j < L; j++) {
+    for (int j = 0; j < L; j++)
+    {
       lattice[i][j] = (randomDouble() < 0.5) ? -1 : 1;
     }
   }
 }
 
-double calculateTotalEnergy() {
+double calculateTotalEnergy()
+{
   double energy = 0.0;
 
-  for (int i = 0; i < L; i++) {
-    for (int j = 0; j < L; j++) {
+  for (int i = 0; i < L; i++)
+  {
+    for (int j = 0; j < L; j++)
+    {
       int spin = lattice[i][j];
 
       int up = lattice[(i - 1 + L) % L][j];
@@ -58,41 +68,56 @@ double calculateTotalEnergy() {
   return 0.5 * energy;
 }
 
-double calculateMagnetization() {
+double calculateMagnetization()
+{
   double mag = 0.0;
-  for (int i = 0; i < L; i++) {
-    for (int j = 0; j < L; j++) {
+  for (int i = 0; i < L; i++)
+  {
+    for (int j = 0; j < L; j++)
+    {
       mag += lattice[i][j];
     }
   }
   return mag / (L * L);
 }
 
-void metropolisHastingsStep() {
+void metropolisHastingsStep()
+{
   int i = (int)(randomDouble() * L);
   int j = (int)(randomDouble() * L);
 
-  double E_before = calculateTotalEnergy();
-  lattice[i][j] *= -1;
-  double E_after = calculateTotalEnergy();
-  double dE = E_after - E_before;
+  /* Compute local delta-energy for flipping spin (i,j) */
+  int spin = lattice[i][j];
+  int up = lattice[(i - 1 + L) % L][j];
+  int down = lattice[(i + 1) % L][j];
+  int left = lattice[i][(j - 1 + L) % L];
+  int right = lattice[i][(j + 1) % L];
+  int neighbor_sum = up + down + left + right; /* -4..4 */
+  double dE = 2.0 * J * (double)spin * (double)neighbor_sum;
 
-  if (dE <= 0.0) {
+  if (dE <= 0.0)
+  {
+    lattice[i][j] = -spin;
+    total_energy += dE;
     return;
   }
 
   double prob = exp(-dE / T);
-  if (randomDouble() >= prob) {
-    lattice[i][j] *= -1;
+  if (randomDouble() < prob)
+  {
+    lattice[i][j] = -spin;
+    total_energy += dE;
   }
 }
 
-void saveLatticeImage(const char *png_filename) {
+void saveLatticeImage(const char *png_filename)
+{
   char ppm_filename[256];
   snprintf(ppm_filename, sizeof(ppm_filename), "temp_%s.ppm", png_filename);
 
   FILE *f = fopen(ppm_filename, "wb");
-  if (!f) {
+  if (!f)
+  {
     printf("Error: Could not create temporary file %s\n", ppm_filename);
     return;
   }
@@ -101,14 +126,19 @@ void saveLatticeImage(const char *png_filename) {
   fprintf(f, "%d %d\n", L, L);
   fprintf(f, "255\n");
 
-  for (int i = 0; i < L; i++) {
-    for (int j = 0; j < L; j++) {
+  for (int i = 0; i < L; i++)
+  {
+    for (int j = 0; j < L; j++)
+    {
       unsigned char r, g, b;
-      if (lattice[i][j] == 1) {
+      if (lattice[i][j] == 1)
+      {
         r = 255;
         g = 255;
         b = 255;
-      } else {
+      }
+      else
+      {
         r = 0;
         g = 50;
         b = 200;
@@ -126,38 +156,48 @@ void saveLatticeImage(const char *png_filename) {
            png_filename);
   int result = system(cmd);
 
-  if (result == 0) {
+  if (result == 0)
+  {
     printf("Saved visualization to %s\n", png_filename);
     remove(ppm_filename);
-  } else {
+  }
+  else
+  {
     rename(ppm_filename, png_filename);
     printf("Saved visualization to %s (install ImageMagick for PNG)\n",
            png_filename);
   }
 }
 
-void sanityCheck(double energy, double mag_per_spin, const char *stage) {
+void sanityCheck(double energy, double mag_per_spin, const char *stage)
+{
   double energy_per_spin = energy / (L * L);
   double Tc = 2.0 * J / log(1.0 + sqrt(2.0));
 
   printf("Sanity check [%s]:\n", stage);
 
   // 1. Energy per spin
-  if (energy_per_spin < -2.0 * J - 0.01 || energy_per_spin > 2.0 * J + 0.01) {
+  if (energy_per_spin < -2.0 * J - 0.01 || energy_per_spin > 2.0 * J + 0.01)
+  {
     printf("  [ERROR] Energy per spin (%.4f) outside expected bounds "
            "[%.2f, %.2f]\n",
            energy_per_spin, -2.0 * J, 2.0 * J);
-  } else {
+  }
+  else
+  {
     printf("  [OK] Energy per spin = %.4f (within bounds [%.2f, %.2f])\n",
            energy_per_spin, -2.0 * J, 2.0 * J);
   }
 
   // 2. Magnetization per spin
-  if (fabs(mag_per_spin) > 1.01) {
+  if (fabs(mag_per_spin) > 1.01)
+  {
     printf("  [ERROR] Magnetization per spin (%.4f) outside physical bounds "
            "[-1, 1]\n",
            mag_per_spin);
-  } else {
+  }
+  else
+  {
     printf("  [OK] Magnetization per spin = %.4f (within bounds [-1, 1])\n",
            mag_per_spin);
   }
@@ -165,15 +205,19 @@ void sanityCheck(double energy, double mag_per_spin, const char *stage) {
   printf("\n");
 }
 
-void freeLattice() {
-  for (int i = 0; i < L; i++) {
+void freeLattice()
+{
+  for (int i = 0; i < L; i++)
+  {
     free(lattice[i]);
   }
   free(lattice);
 }
 
-int main(int argc, const char **argv) {
-  if (argc < 4) {
+int main(int argc, const char **argv)
+{
+  if (argc < 4)
+  {
     printf("Usage: %s <lattice_size> <temperature> <steps>\n", argv[0]);
     printf("Example: %s 100 2.269 10000000\n", argv[0]);
     printf("\n2D Ising Model\n");
@@ -194,8 +238,8 @@ int main(int argc, const char **argv) {
   printf("=================================================\n\n");
 
   initializeLattice();
-
   double initial_energy = calculateTotalEnergy();
+  total_energy = initial_energy;
   double initial_mag = calculateMagnetization();
   printf("Initial energy: %.4f\n", initial_energy);
   printf("Initial magnetization: %.4f\n\n", initial_mag);
@@ -207,7 +251,8 @@ int main(int argc, const char **argv) {
   struct timeval start, end;
   gettimeofday(&start, NULL);
 
-  for (int step = 0; step < steps; step++) {
+  for (int step = 0; step < steps; step++)
+  {
     metropolisHastingsStep();
   }
 
