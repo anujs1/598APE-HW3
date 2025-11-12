@@ -22,17 +22,14 @@ unsigned long long randomU64()
 
 double randomDouble()
 {
-  unsigned long long next = randomU64();
-  next >>= (64 - 26);
-  unsigned long long next2 = randomU64();
-  next2 >>= (64 - 26);
-  return ((next << 27) + next2) / (double)(1LL << 53);
+  unsigned long long x = randomU64();
+  unsigned long long r = x >> 11;
+  return r * (1.0 / 9007199254740992.0);
 }
 
 int L;          // Lattice size (L x L)
 double T;       // Temperature
 double J = 1.0; // Coupling constant
-/* flattened lattice: spins stored as int8_t values (+1/-1) in row-major order */
 int8_t *spins;
 #define IDX(i, j) ((i) * L + (j))
 double total_energy = 0.0;
@@ -58,12 +55,12 @@ double calculateTotalEnergy()
   {
     for (int j = 0; j < L; j++)
     {
-  int spin = spins[IDX(i, j)];
+      int spin = spins[IDX(i, j)];
 
-  int up = spins[IDX((i - 1 + L) % L, j)];
-  int down = spins[IDX((i + 1) % L, j)];
-  int left = spins[IDX(i, (j - 1 + L) % L)];
-  int right = spins[IDX(i, (j + 1) % L)];
+      int up = spins[IDX((i - 1 + L) % L, j)];
+      int down = spins[IDX((i + 1) % L, j)];
+      int left = spins[IDX(i, (j - 1 + L) % L)];
+      int right = spins[IDX(i, (j + 1) % L)];
 
       energy += -J * spin * (up + down + left + right);
     }
@@ -78,7 +75,7 @@ double calculateMagnetization()
   {
     for (int j = 0; j < L; j++)
     {
-  mag += spins[IDX(i, j)];
+      mag += spins[IDX(i, j)];
     }
   }
   return mag / (L * L);
