@@ -33,6 +33,7 @@ double T;       // Temperature
 double J = 1.0; // Coupling constant
 int **lattice;
 double total_energy = 0.0;
+double accept_prob[3] = {1.0, 0.0, 0.0};
 
 void initializeLattice()
 {
@@ -102,7 +103,8 @@ void metropolisHastingsStep()
     return;
   }
 
-  double prob = exp(-dE / T);
+  int sabs_idx = abs(neighbor_sum) / 2;
+  double prob = accept_prob[sabs_idx];
   if (randomDouble() < prob)
   {
     lattice[i][j] = -spin;
@@ -240,6 +242,9 @@ int main(int argc, const char **argv)
   initializeLattice();
   double initial_energy = calculateTotalEnergy();
   total_energy = initial_energy;
+  accept_prob[0] = 1.0;
+  accept_prob[1] = exp(-4.0 * J / T);
+  accept_prob[2] = exp(-8.0 * J / T);
   double initial_mag = calculateMagnetization();
   printf("Initial energy: %.4f\n", initial_energy);
   printf("Initial magnetization: %.4f\n\n", initial_mag);
