@@ -1,5 +1,33 @@
 # 598APE-HW3
 
+## INSTRUCTIONS ON RUNNING OPTIMIZED CODE:
+(Do this once) Build a container from the image from the project root:
+```bash
+docker build -t anujs1/598ape docker/
+```
+
+Select an optimization from a given branch (ex: `dev-optimization-1`), or run our final version with all optimizations combined from the main branch:
+```bash
+git checkout dev-optimization-1
+```
+
+Run the container using the script:
+```bash
+./dockerrun.sh
+```
+
+Make and test the executable (replace with your desired test/command):
+```bash
+make clean && make -j && ./main.exe 64 2.269 100000
+```
+
+Or, use `benchmark.sh` to test all configurations (in the main branch):
+```bash
+make clean && make -j && ./benchmark.sh
+```
+
+---
+
 This repository contains code for homework 3 of 598APE.
 
 This assignment is relatively simple in comparison to HW1 and HW2 to ensure you have enough time to work on the course project.
