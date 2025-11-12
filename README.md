@@ -6,7 +6,7 @@
 docker build -t anujs1/598ape docker/
 ```
 
-Select an optimization from a given branch (ex: `dev-optimization-1`), or run our final version with all optimizations combined from the main branch:
+Select an optimization from a given branch (ex: `compiler-flags`). Each optimization includes the ones before it (reference the report to see the order of the optimizations):
 ```bash
 git checkout dev-optimization-1
 ```
