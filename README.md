@@ -1,12 +1,20 @@
 # 598APE-HW3
 
+## The optimizations in order are (each optimization includes the optimization before it):
+1. `compiler-flags`
+2. `precompute-acceptance-probs`
+3. `1d-flattenned-matrix`
+4. `single-call-RNG`
+5. `compiler-flags`
+6. `checkerboard-sweeps`
+
 ## INSTRUCTIONS ON RUNNING OPTIMIZED CODE:
 (Do this once) Build a container from the image from the project root:
 ```bash
 docker build -t anujs1/598ape docker/
 ```
 
-Select an optimization from a given branch (ex: `compiler-flags`). Each optimization includes the ones before it (reference the report to see the order of the optimizations):
+Select an optimization from a given branch (ex: `compiler-flags`). Each optimization includes the ones before it (reference above to see the order of the optimizations):
 ```bash
 git checkout dev-optimization-1
 ```
