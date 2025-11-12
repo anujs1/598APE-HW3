@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/time.h>
 
 float tdiff(struct timeval *start, struct timeval *end)
@@ -31,19 +32,20 @@ double randomDouble()
 int L;          // Lattice size (L x L)
 double T;       // Temperature
 double J = 1.0; // Coupling constant
-int **lattice;
+/* flattened lattice: spins stored as int8_t values (+1/-1) in row-major order */
+int8_t *spins;
+#define IDX(i, j) ((i) * L + (j))
 double total_energy = 0.0;
 double accept_prob[3] = {1.0, 0.0, 0.0};
 
 void initializeLattice()
 {
-  lattice = (int **)malloc(sizeof(int *) * L);
+  spins = (int8_t *)malloc((size_t)L * (size_t)L * sizeof(int8_t));
   for (int i = 0; i < L; i++)
   {
-    lattice[i] = (int *)malloc(sizeof(int) * L);
     for (int j = 0; j < L; j++)
     {
-      lattice[i][j] = (randomDouble() < 0.5) ? -1 : 1;
+      spins[IDX(i, j)] = (randomDouble() < 0.5) ? -1 : 1;
     }
   }
 }
@@ -56,12 +58,12 @@ double calculateTotalEnergy()
   {
     for (int j = 0; j < L; j++)
     {
-      int spin = lattice[i][j];
+  int spin = spins[IDX(i, j)];
 
-      int up = lattice[(i - 1 + L) % L][j];
-      int down = lattice[(i + 1) % L][j];
-      int left = lattice[i][(j - 1 + L) % L];
-      int right = lattice[i][(j + 1) % L];
+  int up = spins[IDX((i - 1 + L) % L, j)];
+  int down = spins[IDX((i + 1) % L, j)];
+  int left = spins[IDX(i, (j - 1 + L) % L)];
+  int right = spins[IDX(i, (j + 1) % L)];
 
       energy += -J * spin * (up + down + left + right);
     }
@@ -76,7 +78,7 @@ double calculateMagnetization()
   {
     for (int j = 0; j < L; j++)
     {
-      mag += lattice[i][j];
+  mag += spins[IDX(i, j)];
     }
   }
   return mag / (L * L);
@@ -88,17 +90,17 @@ void metropolisHastingsStep()
   int j = (int)(randomDouble() * L);
 
   /* Compute local delta-energy for flipping spin (i,j) */
-  int spin = lattice[i][j];
-  int up = lattice[(i - 1 + L) % L][j];
-  int down = lattice[(i + 1) % L][j];
-  int left = lattice[i][(j - 1 + L) % L];
-  int right = lattice[i][(j + 1) % L];
+  int spin = spins[IDX(i, j)];
+  int up = spins[IDX((i - 1 + L) % L, j)];
+  int down = spins[IDX((i + 1) % L, j)];
+  int left = spins[IDX(i, (j - 1 + L) % L)];
+  int right = spins[IDX(i, (j + 1) % L)];
   int neighbor_sum = up + down + left + right; /* -4..4 */
   double dE = 2.0 * J * (double)spin * (double)neighbor_sum;
 
   if (dE <= 0.0)
   {
-    lattice[i][j] = -spin;
+    spins[IDX(i, j)] = -spin;
     total_energy += dE;
     return;
   }
@@ -107,7 +109,7 @@ void metropolisHastingsStep()
   double prob = accept_prob[sabs_idx];
   if (randomDouble() < prob)
   {
-    lattice[i][j] = -spin;
+    spins[IDX(i, j)] = -spin;
     total_energy += dE;
   }
 }
@@ -133,7 +135,7 @@ void saveLatticeImage(const char *png_filename)
     for (int j = 0; j < L; j++)
     {
       unsigned char r, g, b;
-      if (lattice[i][j] == 1)
+      if (spins[IDX(i, j)] == 1)
       {
         r = 255;
         g = 255;
@@ -209,11 +211,7 @@ void sanityCheck(double energy, double mag_per_spin, const char *stage)
 
 void freeLattice()
 {
-  for (int i = 0; i < L; i++)
-  {
-    free(lattice[i]);
-  }
-  free(lattice);
+  free(spins);
 }
 
 int main(int argc, const char **argv)
