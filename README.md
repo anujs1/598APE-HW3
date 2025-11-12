@@ -1,7 +1,7 @@
 # 598APE-HW3
 
 ## The optimizations in order are (each optimization includes the optimization before it):
-1. `compiler-flags`
+1. `delta-e`
 2. `precompute-acceptance-probs`
 3. `1d-flattenned-matrix`
 4. `single-call-RNG`
