@@ -5,25 +5,31 @@
 #include <stdint.h>
 #include <sys/time.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 float tdiff(struct timeval *start, struct timeval *end)
 {
   return (end->tv_sec - start->tv_sec) + 1e-6 * (end->tv_usec - start->tv_usec);
 }
 
-unsigned long long seed = 100;
+typedef struct {
+  uint64_t state;
+} rng_state_t;
 
-unsigned long long randomU64()
+static inline uint64_t rng_next(rng_state_t *rng)
 {
-  seed ^= (seed << 21);
-  seed ^= (seed >> 35);
-  seed ^= (seed << 4);
-  return seed;
+  rng->state ^= (rng->state << 21);
+  rng->state ^= (rng->state >> 35);
+  rng->state ^= (rng->state << 4);
+  return rng->state;
 }
 
-double randomDouble()
+static inline double rng_double(rng_state_t *rng)
 {
-  unsigned long long x = randomU64();
-  unsigned long long r = x >> 11;
+  uint64_t x = rng_next(rng);
+  uint64_t r = x >> 11; /* top 53 bits */
   return r * (1.0 / 9007199254740992.0);
 }
 
@@ -35,14 +41,14 @@ int8_t *spins;
 double total_energy = 0.0;
 double accept_prob[3] = {1.0, 0.0, 0.0};
 
-void initializeLattice()
+void initializeLattice(rng_state_t *rng)
 {
   spins = (int8_t *)malloc((size_t)L * (size_t)L * sizeof(int8_t));
   for (int i = 0; i < L; i++)
   {
     for (int j = 0; j < L; j++)
     {
-      spins[IDX(i, j)] = (randomDouble() < 0.5) ? -1 : 1;
+      spins[IDX(i, j)] = (rng_double(rng) < 0.5) ? -1 : 1;
     }
   }
 }
@@ -81,33 +87,48 @@ double calculateMagnetization()
   return mag / (L * L);
 }
 
-void metropolisHastingsStep()
+void checkerboardSweep(int color, rng_state_t *thread_rngs, int num_threads)
 {
-  int i = (int)(randomDouble() * L);
-  int j = (int)(randomDouble() * L);
-
-  /* Compute local delta-energy for flipping spin (i,j) */
-  int spin = spins[IDX(i, j)];
-  int up = spins[IDX((i - 1 + L) % L, j)];
-  int down = spins[IDX((i + 1) % L, j)];
-  int left = spins[IDX(i, (j - 1 + L) % L)];
-  int right = spins[IDX(i, (j + 1) % L)];
-  int neighbor_sum = up + down + left + right; /* -4..4 */
-  double dE = 2.0 * J * (double)spin * (double)neighbor_sum;
-
-  if (dE <= 0.0)
+  #pragma omp parallel num_threads(num_threads)
   {
-    spins[IDX(i, j)] = -spin;
-    total_energy += dE;
-    return;
-  }
-
-  int sabs_idx = abs(neighbor_sum) / 2;
-  double prob = accept_prob[sabs_idx];
-  if (randomDouble() < prob)
-  {
-    spins[IDX(i, j)] = -spin;
-    total_energy += dE;
+    int tid = 0;
+    #ifdef _OPENMP
+        tid = omp_get_thread_num();
+    #endif
+    rng_state_t *rng = &thread_rngs[tid];
+    
+    #pragma omp for schedule(static) reduction(+:total_energy)
+    for (int i = 0; i < L; i++)
+    {
+      for (int j = 0; j < L; j++)
+      {
+        if ((i + j) % 2 != color) continue;
+        
+        int spin = spins[IDX(i, j)];
+        int up = spins[IDX((i - 1 + L) % L, j)];
+        int down = spins[IDX((i + 1) % L, j)];
+        int left = spins[IDX(i, (j - 1 + L) % L)];
+        int right = spins[IDX(i, (j + 1) % L)];
+        int neighbor_sum = up + down + left + right;
+        double dE = 2.0 * J * (double)spin * (double)neighbor_sum;
+        
+        if (dE <= 0.0)
+        {
+          spins[IDX(i, j)] = -spin;
+          total_energy += dE;
+        }
+        else
+        {
+          int sabs_idx = abs(neighbor_sum) / 2;
+          double prob = accept_prob[sabs_idx];
+          if (rng_double(rng) < prob)
+          {
+            spins[IDX(i, j)] = -spin;
+            total_energy += dE;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -225,16 +246,37 @@ int main(int argc, const char **argv)
   L = atoi(argv[1]);
   T = atof(argv[2]);
   int steps = atoi(argv[3]);
+  
+  int total_spins = L * L;
+  int sweeps = (steps + total_spins - 1) / total_spins;
+  if (sweeps < 1) sweeps = 1;
+
+  int num_threads = 1;
+  #ifdef _OPENMP
+    #pragma omp parallel
+    {
+      #pragma omp single
+      num_threads = omp_get_num_threads();
+    }
+  #endif
 
   printf("2D Ising Model\n");
   printf("=================================================\n");
   printf("Lattice size: %d x %d (%d spins)\n", L, L, L * L);
   printf("Temperature: T = %.4f (Tc ≈ 2.269)\n", T);
   printf("Coupling constant: J = %.2f\n", J);
-  printf("Number of Metropolis-Hastings steps: %d\n", steps);
+  printf("Single-spin steps requested: %d\n", steps);
+  printf("Equivalent Monte Carlo sweeps: %d\n", sweeps);
+  printf("OpenMP threads: %d\n", num_threads);
   printf("=================================================\n\n");
 
-  initializeLattice();
+  rng_state_t *thread_rngs = (rng_state_t *)malloc(num_threads * sizeof(rng_state_t));
+  for (int i = 0; i < num_threads; i++)
+  {
+    thread_rngs[i].state = 100 + i * 12345;
+  }
+
+  initializeLattice(&thread_rngs[0]);
   double initial_energy = calculateTotalEnergy();
   total_energy = initial_energy;
   accept_prob[0] = 1.0;
@@ -251,9 +293,10 @@ int main(int argc, const char **argv)
   struct timeval start, end;
   gettimeofday(&start, NULL);
 
-  for (int step = 0; step < steps; step++)
+  for (int step = 0; step < sweeps; step++)
   {
-    metropolisHastingsStep();
+    checkerboardSweep(0, thread_rngs, num_threads);
+    checkerboardSweep(1, thread_rngs, num_threads);
   }
 
   gettimeofday(&end, NULL);
@@ -270,6 +313,7 @@ int main(int argc, const char **argv)
 
   saveLatticeImage("final_state.png");
 
+  free(thread_rngs);
   freeLattice();
   return 0;
 }
